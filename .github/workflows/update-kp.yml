@@ -1,0 +1,31 @@
+name: Update quarterly conversion index
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read published indices
+        run: node scripts/update-kp-index.mjs
+      - name: Commit a new quarter
+        run: |
+          if git diff --quiet -- app/data/kp-index.json; then
+            echo "No new index"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app/data/kp-index.json
+          git commit -m "Update quarterly conversion index"
+          git push

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import data from "./data/calculator-data.json";
+import { kpSource, resolveKpIndex } from "./kp-index";
 
 type Mode = "norm" | "compat";
 type Tab = "design" | "htc";
@@ -35,12 +36,21 @@ export default function Calculator() {
   const [objectId, setObjectId] = useState(categoryObjects[0]?.object_id ?? "1");
   const selectedObject = objects.find(o => o.category === category && o.object_id === objectId) ?? categoryObjects[0];
   const objectRows = useMemo(() => intervals.filter(r => r.category === category && r.object_id === selectedObject?.object_id && r.object === selectedObject?.object), [intervals, category, selectedObject]);
-  const [n, setN] = useState(2); const [kp, setKp] = useState(6.99); const [stage, setStage] = useState<Stage>("RP");
+  const currentKp = resolveKpIndex();
+  const [n, setN] = useState(2); const [kp, setKp] = useState(currentKp.value); const [kpAutomatic, setKpAutomatic] = useState(true); const [stage, setStage] = useState<Stage>("RP");
   const [pp, setPp] = useState(false); const [vat, setVat] = useState(true); const [reuse, setReuse] = useState("1");
   const [unique, setUnique] = useState(false); const [reconstruction, setReconstruction] = useState(false); const [soils, setSoils] = useState(false);
   const [seismic, setSeismic] = useState("1"); const [shortening, setShortening] = useState("1"); const [general, setGeneral] = useState(false);
   const [capRepair, setCapRepair] = useState(false); const [imported, setImported] = useState(false);
   const [selectedSections, setSelectedSections] = useState<string[]>([...sectionKeys]);
+
+  useEffect(() => {
+    if (!kpAutomatic) return;
+    const applyPublishedIndex = () => setKp(resolveKpIndex().value);
+    applyPublishedIndex();
+    const timer = window.setInterval(applyPublishedIndex, 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [kpAutomatic]);
 
   const chooseInterval = (targetMode: Mode) => {
     const sorted = [...objectRows].sort((a, b) => num(a.threshold) - num(b.threshold));
@@ -89,7 +99,7 @@ export default function Calculator() {
         <label>Раздел справочника<select value={category} onChange={e => handleCategory(e.target.value)}>{categories.map(c => <option key={c}>{c}</option>)}</select></label>
         <label>Объект<select value={selectedObject?.object_id ?? ""} onChange={e => setObjectId(e.target.value)}>{categoryObjects.map((o, i) => <option value={o.object_id} key={`${o.object_id}-${i}`}>{o.object}</option>)}</select></label>
         {selectedObject?.status !== "ok" && <div className="alert">⚠ Строка источника имеет статус «{selectedObject?.status}». Расчёт доступен только при найденной формуле.</div>}
-        <div className="fieldGrid"><label>Натуральный показатель<div className="inputUnit"><input type="number" min="0" step="any" value={n} onChange={e => setN(num(e.target.value))}/><span>{objectRows[0]?.unit || "ед."}</span></div></label><label>Коэффициент пересчёта KP<input type="number" step="0.01" value={kp} onChange={e => setKp(num(e.target.value))}/></label></div>
+        <div className="fieldGrid"><label>Натуральный показатель<div className="inputUnit"><input type="number" min="0" step="any" value={n} onChange={e => setN(num(e.target.value))}/><span>{objectRows[0]?.unit || "ед."}</span></div></label><label>Коэффициент пересчёта KP<input type="number" step="0.01" value={kp} onChange={e => { setKp(num(e.target.value)); setKpAutomatic(false); }}/><span className="kpMeta"><b>{kpAutomatic ? `Авто · ${currentKp.period}` : "Введён вручную"}</b><a href={kpSource.url} target="_blank" rel="noreferrer">Источник</a>{!kpAutomatic && <button type="button" onClick={() => { const published = resolveKpIndex(); setKp(published.value); setKpAutomatic(true); }}>Вернуть авто</button>}</span></label></div>
         <div className="divider"/><div className="sectionHead"><h3>Стадии и состав</h3><span>02</span></div>
         <div className="segmented">{(["P","RP","R"] as Stage[]).map(s => <button className={stage === s ? "active" : ""} onClick={() => setStage(s)} key={s}>{stageName(s)}<small>{s === "P" ? "40%" : s === "R" ? "60%" : "100%"}</small></button>)}</div>
         <Toggle checked={pp} onChange={setPp} label="Предпроектные работы" value="7,5%"/>
@@ -101,7 +111,7 @@ export default function Calculator() {
         <Toggle checked={vat} onChange={setVat} label={mode === "norm" ? "НДС 22%" : "НДС (как в источнике — 20%)"} value={mode === "norm" ? "1,22" : "1,20"}/>
       </section>
       <aside className="panel resultPanel"><div className="resultTop"><span className={mode === "norm" ? "status norm" : "status legacy"}>{mode === "norm" ? "Нормативный режим" : "Режим совместимости"}</span><span className="formulaCode">{result ? `a ${result.row.a} · b ${result.row.b}` : "нет формулы"}</span></div><p className="resultLabel">Стоимость проектных работ</p><div className="total">{result ? fmt(result.total) : "—"}<span>тыс. ₽</span></div><div className="time"><span>Расчётный срок</span><b>{result?.timeText ?? "—"} мес.</b></div>
-        {!result && <div className="alert">Для выбранного значения исходная таблица не содержит применимой формулы.</div>}{result && <><div className="breakdown"><h3>Раскладка расчёта</h3><Line label="Базовая стоимость B" value={`${fmt(result.base)} тыс. ₽`}/><Line label={`Стадия ${stageName(stage)}`} value={`× ${stageFactor(stage).toFixed(2)}`}/><Line label="Выбранные разделы" value={`${(result.sectionRatio*100).toFixed(1)}%`}/><Line label="Проектные коэффициенты" value={`× ${result.cappedProduct.toFixed(3)}`}/>{mode === "norm" && result.regularProduct > 2 && <p className="capNote">Произведение {result.regularProduct.toFixed(3)} ограничено значением 2,0.</p>}<Line label="Предпроектные работы" value={`${fmt(result.ppCost)} тыс. ₽`}/><Line label="НДС" value={`× ${result.vatFactor.toFixed(2)}`}/></div><div className="formula"><span>Формула</span><code>B = KP × (a + b × n)</code></div></>}
+        {!result && <div className="alert">Для выбранного значения исходная таблица не содержит применимой формулы.</div>}{result && <><div className="breakdown"><h3>Раскладка расчёта</h3><Line label="Базовая стоимость B" value={`${fmt(result.base)} тыс. ₽`}/><Line label={kpAutomatic ? `Индекс ${currentKp.period}` : "KP (введён вручную)"} value={`× ${kp.toFixed(2)}`}/><Line label={`Стадия ${stageName(stage)}`} value={`× ${stageFactor(stage).toFixed(2)}`}/><Line label="Выбранные разделы" value={`${(result.sectionRatio*100).toFixed(1)}%`}/><Line label="Проектные коэффициенты" value={`× ${result.cappedProduct.toFixed(3)}`}/>{mode === "norm" && result.regularProduct > 2 && <p className="capNote">Произведение {result.regularProduct.toFixed(3)} ограничено значением 2,0.</p>}<Line label="Предпроектные работы" value={`${fmt(result.ppCost)} тыс. ₽`}/><Line label="НДС" value={`× ${result.vatFactor.toFixed(2)}`}/></div><div className="formula"><span>Формула</span><code>B = KP × (a + b × n)</code></div></>}
         <div className="compare"><div><span>Разница с другим режимом</span><b>{norm && compat ? `${mismatch >= 0 ? "+" : ""}${fmt(mismatch)} тыс. ₽` : "—"}</b></div><p>{mode === "norm" ? "Исправлены НДС, профили разделов, границы интервалов, срок и ограничение коэффициентов." : "Историческая логика исходного калькулятора, включая известные особенности."}</p></div><details><summary>О качестве исходных данных</summary><p>225 объектов связаны корректно; 23 требуют проверки идентификаторов. Нормативный режим устраняет алгоритмические дефекты, но не заменяет построчную сверку таблиц с официальным МРР.</p></details>
       </aside>
     </div> : <HtcCalculator mode={mode} vat={vat} setVat={setVat} rows={htc}/>} 

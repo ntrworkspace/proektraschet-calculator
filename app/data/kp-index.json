@@ -1,0 +1,30 @@
+{
+  "source": {
+    "title": "КонсультантПлюс: индексы изменения сметной стоимости проектных работ",
+    "url": "https://www.consultant.ru/document/cons_doc_LAW_39473/",
+    "column": "Проектные работы к базовым ценам на 01.01.2001"
+  },
+  "indices": [
+    {
+      "year": 2026,
+      "quarter": 1,
+      "period": "I квартал 2026 г.",
+      "effectiveFrom": "2026-01-01",
+      "value": 6.99
+    },
+    {
+      "year": 2026,
+      "quarter": 2,
+      "period": "II квартал 2026 г.",
+      "effectiveFrom": "2026-04-01",
+      "value": 7.1
+    },
+    {
+      "year": 2026,
+      "quarter": 3,
+      "period": "III квартал 2026 г.",
+      "effectiveFrom": "2026-07-01",
+      "value": 7.22
+    }
+  ]
+}
